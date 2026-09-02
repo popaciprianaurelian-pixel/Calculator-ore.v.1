@@ -25,6 +25,7 @@ import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
@@ -106,27 +107,51 @@ public class MainActivity extends Activity {
         updateUI();
     }
 
+    String getNextDay(String dateStr) {
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+            Calendar cal = Calendar.getInstance();
+            cal.setTime(sdf.parse(dateStr));
+            cal.add(Calendar.DAY_OF_MONTH, 1);
+            return sdf.format(cal.getTime());
+        } catch (Exception e) { return dateStr; }
+    }
+
     void updateUI() {
         SimpleDateFormat sdf = new SimpleDateFormat("MMMM yyyy", new Locale("ro"));
         tvMonth.setText(sdf.format(currentMonth.getTime()).toUpperCase());
 
         String monthPrefix = String.format(Locale.US, "%04d-%02d", currentMonth.get(Calendar.YEAR), currentMonth.get(Calendar.MONTH) + 1);
-        Cursor c = db.getReadableDatabase().rawQuery("SELECT total_mins, overtime_mins, type FROM shifts WHERE date LIKE ?", new String[]{monthPrefix + "%"});
-        int totalMins = 0, overMins = 0, daysWorked = 0;
         
+        HashSet<String> workedDays = new HashSet<>();
+        int totalMins = 0, overMins = 0;
+
+        Cursor c = db.getReadableDatabase().rawQuery("SELECT date, spans_two_days, type, total_mins, overtime_mins FROM shifts", null);
         while (c.moveToNext()) {
-            if (!c.getString(2).equals("LIBER") && !c.getString(2).equals("CONCEDIU")) daysWorked++;
-            totalMins += c.getInt(0);
-            overMins += c.getInt(1);
+            String date = c.getString(0);
+            int spans = c.getInt(1);
+            String type = c.getString(2);
+            boolean isWork = !type.equals("LIBER") && !type.equals("CONCEDIU");
+
+            if (date.startsWith(monthPrefix)) {
+                if (isWork) workedDays.add(date);
+                totalMins += c.getInt(3);
+                overMins += c.getInt(4);
+            }
+            if (spans == 1 && isWork) {
+                String nextDay = getNextDay(date);
+                if (nextDay.startsWith(monthPrefix)) workedDays.add(nextDay);
+            }
         }
         c.close();
 
+        int daysWorked = workedDays.size();
         int workedHours = totalMins / 60;
         int diff = workedHours - currentNorm;
         String difText = diff >= 0 ? ("+" + diff + "h peste normă") : (diff + "h sub normă");
 
         tvStats.setText(
-            "📋 Zile lucrate: " + daysWorked + "\n" +
+            "📋 Zile lucrate (calendar): " + daysWorked + "\n" +
             "🎯 Norma setată: " + currentNorm + "h\n" +
             "⏳ Total adunat: " + workedHours + "h " + (totalMins % 60) + "m\n" +
             "🔥 Ore Suplimentare (>8h/zi): " + (overMins / 60) + "h " + (overMins % 60) + "m\n" +
@@ -142,7 +167,7 @@ public class MainActivity extends Activity {
         layout.setPadding(50, 50, 50, 50);
         scroll.addView(layout);
 
-        TextView tvDate = new TextView(this); tvDate.setText("Data: " + date); tvDate.setTextSize(20);
+        TextView tvDate = new TextView(this); tvDate.setText("Data intrării: " + date); tvDate.setTextSize(20);
         tvDate.setPadding(0,0,0,20);
         layout.addView(tvDate);
 
@@ -160,7 +185,13 @@ public class MainActivity extends Activity {
         EditText etIntervals = new EditText(this); etIntervals.setHint("Orare Start-Stop (doar informativ)");
         layout.addView(etIntervals);
 
-        // CONTROL TOTAL: AICI TRECI TU MANUAL ORELE SI MINUTELE
+        // Bifa pentru tura de 2 zile
+        CheckBox cbTwoDays = new CheckBox(this);
+        cbTwoDays.setText("Tura se termină a doua zi (+1 zi adăugată la totalul lunii)");
+        cbTwoDays.setTextColor(Color.parseColor("#C62828"));
+        layout.addView(cbTwoDays);
+
+        // CONTROL TOTAL MANUAL
         TextView tvManual = new TextView(this); 
         tvManual.setText("CÂT AI LUCRAT EFECTIV? (Treci manual):"); 
         tvManual.setTextColor(Color.parseColor("#D2691E"));
@@ -190,23 +221,30 @@ public class MainActivity extends Activity {
         }
         layout.addView(rgType);
 
-        Button btnPhoto = new Button(this); btnPhoto.setText("📷 Poză Foaie Parcurs");
-        layout.addView(btnPhoto);
+        TextView tvPhotoLabel = new TextView(this); tvPhotoLabel.setText("Atașează Foaie Parcurs:"); tvPhotoLabel.setPadding(0,30,0,10);
+        layout.addView(tvPhotoLabel);
 
-        // Logica butoanelor de autocompletare
+        LinearLayout photoRow = new LinearLayout(this);
+        photoRow.setOrientation(LinearLayout.HORIZONTAL);
+        Button btnCamera = new Button(this); btnCamera.setText("📷 Cameră");
+        Button btnGallery = new Button(this); btnGallery.setText("🖼 Galerie");
+        photoRow.addView(btnCamera); photoRow.addView(btnGallery);
+        layout.addView(photoRow);
+
+        // Logica butoanelor de autocompletare inteligente
         String[] shifts = {"11123", "11186", "11178", "R11190", "11127", "11182", "Manevra"};
         for (String s : shifts) {
             Button b = new Button(this);
             b.setText(s);
             b.setOnClickListener(v -> {
                 etShift.setText(s);
-                if(s.equals("11123")) { etIntervals.setText("07:25 - 19:30"); etTotalH.setText("12"); etTotalM.setText("5"); }
-                else if(s.equals("11186")) { etIntervals.setText("15:35 - 16:00"); etTotalH.setText("24"); etTotalM.setText("25"); }
-                else if(s.equals("11178")) { etIntervals.setText("10:30 - 20:30"); etTotalH.setText("10"); etTotalM.setText("0"); }
-                else if(s.equals("R11190")) { etIntervals.setText("19:35 - 14:30"); etTotalH.setText("18"); etTotalM.setText("55"); }
-                else if(s.equals("11127")) { etIntervals.setText("15:30 - 10:00"); etTotalH.setText("18"); etTotalM.setText("30"); }
-                else if(s.equals("11182")) { etIntervals.setText("13:15 - 23:00"); etTotalH.setText("9"); etTotalM.setText("45"); }
-                else if(s.equals("Manevra")) { etIntervals.setText("07:00 - 16:30"); etTotalH.setText("9"); etTotalM.setText("30"); }
+                if(s.equals("11123")) { etIntervals.setText("07:25 - 19:30"); etTotalH.setText("12"); etTotalM.setText("5"); cbTwoDays.setChecked(false); }
+                else if(s.equals("11186")) { etIntervals.setText("15:35 - 16:00"); etTotalH.setText("24"); etTotalM.setText("25"); cbTwoDays.setChecked(true); }
+                else if(s.equals("11178")) { etIntervals.setText("10:30 - 20:30"); etTotalH.setText("10"); etTotalM.setText("0"); cbTwoDays.setChecked(false); }
+                else if(s.equals("R11190")) { etIntervals.setText("19:35 - 14:30"); etTotalH.setText("18"); etTotalM.setText("55"); cbTwoDays.setChecked(true); }
+                else if(s.equals("11127")) { etIntervals.setText("15:30 - 10:00"); etTotalH.setText("18"); etTotalM.setText("30"); cbTwoDays.setChecked(true); }
+                else if(s.equals("11182")) { etIntervals.setText("13:15 - 23:00"); etTotalH.setText("9"); etTotalM.setText("45"); cbTwoDays.setChecked(false); }
+                else if(s.equals("Manevra")) { etIntervals.setText("07:00 - 16:30"); etTotalH.setText("9"); etTotalM.setText("30"); cbTwoDays.setChecked(false); }
             });
             presetLayout.addView(b);
         }
@@ -216,6 +254,7 @@ public class MainActivity extends Activity {
         String existingId = null;
         if (c.moveToFirst()) {
             existingId = c.getString(0);
+            cbTwoDays.setChecked(c.getInt(1) == 1);
             String type = c.getString(2);
             for (int i = 0; i < rgType.getChildCount(); i++) {
                 if (((RadioButton) rgType.getChildAt(i)).getText().toString().equals(type)) ((RadioButton) rgType.getChildAt(i)).setChecked(true);
@@ -223,12 +262,31 @@ public class MainActivity extends Activity {
             etTotalH.setText(String.valueOf(c.getInt(3) / 60));
             etTotalM.setText(String.valueOf(c.getInt(3) % 60));
             etNotes.setText(c.getString(5));
+            
+            String uriStr = c.getString(6);
+            if (uriStr != null && !uriStr.isEmpty()) currentPhotoUri = Uri.parse(uriStr);
+            
             etShift.setText(c.getString(7));
             etIntervals.setText(c.getString(8));
         }
         c.close();
 
-        btnPhoto.setOnClickListener(v -> {
+        if (currentPhotoUri != null) {
+            Button btnViewPhoto = new Button(this);
+            btnViewPhoto.setText("👁️ Vezi Poza Salvată");
+            btnViewPhoto.setTextColor(Color.parseColor("#007BFF"));
+            layout.addView(btnViewPhoto);
+            
+            btnViewPhoto.setOnClickListener(v -> {
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(currentPhotoUri, "image/*");
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                try { startActivity(intent); } 
+                catch (Exception e) { Toast.makeText(this, "Nu s-a putut deschide poza.", Toast.LENGTH_LONG).show(); }
+            });
+        }
+
+        btnCamera.setOnClickListener(v -> {
             Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
             File photoFile = null;
             try {
@@ -242,6 +300,13 @@ public class MainActivity extends Activity {
             }
         });
 
+        btnGallery.setOnClickListener(v -> {
+            Intent pickPhoto = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            pickPhoto.addCategory(Intent.CATEGORY_OPENABLE);
+            pickPhoto.setType("image/*");
+            startActivityForResult(pickPhoto, 102);
+        });
+
         final String fExistingId = existingId;
         builder.setView(scroll)
             .setPositiveButton("Salvează", (dialog, which) -> {
@@ -252,13 +317,13 @@ public class MainActivity extends Activity {
                 
                 int h = etTotalH.getText().toString().isEmpty() ? 0 : Integer.parseInt(etTotalH.getText().toString());
                 int m = etTotalM.getText().toString().isEmpty() ? 0 : Integer.parseInt(etTotalM.getText().toString());
-                int finalTotalMins = (h * 60) + m; // IA EXACT CE AI SCRIS TU, FARA SA SCADA NIMIC!
-                
+                int finalTotalMins = (h * 60) + m; 
                 int overtime = finalTotalMins > 480 ? (finalTotalMins - 480) : 0; 
                 
                 SQLiteDatabase wdb = db.getWritableDatabase();
                 ContentValues cv = new ContentValues();
                 cv.put("date", date); 
+                cv.put("spans_two_days", cbTwoDays.isChecked() ? 1 : 0);
                 cv.put("type", type); 
                 cv.put("total_mins", finalTotalMins); 
                 cv.put("overtime_mins", overtime);
@@ -282,6 +347,23 @@ public class MainActivity extends Activity {
             })
             .setNegativeButton("Anulează", null)
             .show();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode == RESULT_OK) {
+            if (requestCode == 101) {
+                Toast.makeText(this, "Poză atașată din cameră!", Toast.LENGTH_SHORT).show();
+            } else if (requestCode == 102 && data != null) {
+                currentPhotoUri = data.getData();
+                try {
+                    final int takeFlags = data.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION;
+                    getContentResolver().takePersistableUriPermission(currentPhotoUri, takeFlags);
+                } catch (SecurityException e) {}
+                Toast.makeText(this, "Poză atașată din galerie!", Toast.LENGTH_SHORT).show();
+            }
+        }
     }
 
     void exportPDF() {
@@ -348,9 +430,9 @@ public class MainActivity extends Activity {
     }
 
     class DatabaseHelper extends SQLiteOpenHelper {
-        public DatabaseHelper(Context ctx) { super(ctx, "OreMunca.db", null, 5); }
+        public DatabaseHelper(Context ctx) { super(ctx, "OreMunca.db", null, 6); }
         public void onCreate(SQLiteDatabase db) {
-            db.execSQL("CREATE TABLE shifts (id INTEGER PRIMARY KEY, date TEXT, type TEXT, total_mins INTEGER, overtime_mins INTEGER, notes TEXT, photo_uri TEXT, shift_code TEXT, intervals TEXT)");
+            db.execSQL("CREATE TABLE shifts (id INTEGER PRIMARY KEY, date TEXT, spans_two_days INTEGER, type TEXT, total_mins INTEGER, overtime_mins INTEGER, notes TEXT, photo_uri TEXT, shift_code TEXT, intervals TEXT)");
         }
         public void onUpgrade(SQLiteDatabase db, int oldV, int newV) {
             db.execSQL("DROP TABLE IF EXISTS shifts"); onCreate(db);
