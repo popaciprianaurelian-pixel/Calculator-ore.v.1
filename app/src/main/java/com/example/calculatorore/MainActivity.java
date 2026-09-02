@@ -1,6 +1,11 @@
 package com.example.calculatorore;
 
 import android.app.Activity;
+import android.content.ContentValues;
+import android.content.Context;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.text.InputType;
@@ -8,95 +13,220 @@ import android.view.Gravity;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
+
+    DatabaseHelper dbHelper;
+    LinearLayout historyLayout;
+    TextView tvStats;
+
+    private int dp(int v) {
+        return (int) (v * getResources().getDisplayMetrics().density);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        dbHelper = new DatabaseHelper(this);
+
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.setBackgroundColor(Color.parseColor("#F5F5F5"));
 
         LinearLayout mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
-        mainLayout.setPadding(40, 60, 40, 40);
-        mainLayout.setBackgroundColor(Color.parseColor("#F5F5F5"));
+        mainLayout.setPadding(dp(20), dp(30), dp(20), dp(20));
+        scrollView.addView(mainLayout);
 
         TextView tvTitle = new TextView(this);
-        tvTitle.setText("Calculator Ture Manevră");
-        tvTitle.setTextSize(24);
+        tvTitle.setText("Foi de Parcurs & Rapoarte");
+        tvTitle.setTextSize(22);
         tvTitle.setTextColor(Color.BLACK);
         tvTitle.setGravity(Gravity.CENTER);
-        tvTitle.setPadding(0, 0, 0, 40);
+        tvTitle.setPadding(0, 0, 0, dp(20));
         mainLayout.addView(tvTitle);
 
-        LinearLayout presetLayout = new LinearLayout(this);
-        presetLayout.setOrientation(LinearLayout.HORIZONTAL);
-        presetLayout.setGravity(Gravity.CENTER);
-        presetLayout.setPadding(0, 0, 0, 30);
+        final EditText etDate = new EditText(this);
+        etDate.setHint("Data (ex: 02/09/2026)");
+        etDate.setText(new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(new Date()));
+        etDate.setTextColor(Color.BLACK);
+        mainLayout.addView(etDate);
 
-        Button btn1 = new Button(this);
-        btn1.setText("11123");
-        presetLayout.addView(btn1);
-
-        Button btn2 = new Button(this);
-        btn2.setText("11186");
-        presetLayout.addView(btn2);
-
-        Button btn3 = new Button(this);
-        btn3.setText("11127");
-        presetLayout.addView(btn3);
-
-        mainLayout.addView(presetLayout);
+        final EditText etShift = new EditText(this);
+        etShift.setHint("Număr Tren / Manevră");
+        etShift.setTextColor(Color.BLACK);
+        mainLayout.addView(etShift);
 
         final EditText etStart = new EditText(this);
-        etStart.setHint("Ora început (ex: 07:25)");
-        etStart.setInputType(InputType.TYPE_CLASS_DATETIME | InputType.TYPE_DATETIME_VARIATION_TIME);
+        etStart.setHint("Ora început (HH:MM)");
         etStart.setTextColor(Color.BLACK);
         mainLayout.addView(etStart);
 
         final EditText etEnd = new EditText(this);
-        etEnd.setHint("Ora sfârșit (ex: 19:30)");
-        etEnd.setInputType(InputType.TYPE_CLASS_DATETIME | InputType.TYPE_DATETIME_VARIATION_TIME);
+        etEnd.setHint("Ora sfârșit (HH:MM)");
         etEnd.setTextColor(Color.BLACK);
         mainLayout.addView(etEnd);
 
-        Button btnCalc = new Button(this);
-        btnCalc.setText("Calculează Totalul");
-        btnCalc.setBackgroundColor(Color.parseColor("#007BFF"));
-        btnCalc.setTextColor(Color.WHITE);
-        mainLayout.addView(btnCalc);
+        // Butoane pentru autocompletare rapida
+        LinearLayout preset1 = new LinearLayout(this);
+        preset1.setOrientation(LinearLayout.HORIZONTAL);
+        preset1.setGravity(Gravity.CENTER);
+        String[] shifts1 = {"11123", "11186", "11178"};
+        for (String s : shifts1) {
+            Button b = new Button(this);
+            b.setText(s);
+            b.setOnClickListener(v -> setShiftData(s, etShift, etStart, etEnd));
+            preset1.addView(b);
+        }
+        mainLayout.addView(preset1);
 
-        final TextView tvResult = new TextView(this);
-        tvResult.setTextSize(20);
-        tvResult.setTextColor(Color.parseColor("#28A745"));
-        tvResult.setGravity(Gravity.CENTER);
-        tvResult.setPadding(0, 40, 0, 0);
-        mainLayout.addView(tvResult);
+        LinearLayout preset2 = new LinearLayout(this);
+        preset2.setOrientation(LinearLayout.HORIZONTAL);
+        preset2.setGravity(Gravity.CENTER);
+        String[] shifts2 = {"11190", "11127", "11182"};
+        for (String s : shifts2) {
+            Button b = new Button(this);
+            b.setText(s);
+            b.setOnClickListener(v -> setShiftData(s, etShift, etStart, etEnd));
+            preset2.addView(b);
+        }
+        mainLayout.addView(preset2);
 
-        setContentView(mainLayout);
+        Button btnSave = new Button(this);
+        btnSave.setText("Salvează Foaia de Parcurs");
+        btnSave.setBackgroundColor(Color.parseColor("#007BFF"));
+        btnSave.setTextColor(Color.WHITE);
+        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        btnParams.setMargins(0, dp(15), 0, 0);
+        btnSave.setLayoutParams(btnParams);
+        mainLayout.addView(btnSave);
 
-        btn1.setOnClickListener(v -> { etStart.setText("07:25"); etEnd.setText("19:30"); });
-        btn2.setOnClickListener(v -> { etStart.setText("15:35"); etEnd.setText("16:00"); });
-        btn3.setOnClickListener(v -> { etStart.setText("15:30"); etEnd.setText("10:00"); });
+        tvStats = new TextView(this);
+        tvStats.setTextSize(18);
+        tvStats.setTextColor(Color.parseColor("#D2691E"));
+        tvStats.setPadding(0, dp(20), 0, dp(10));
+        mainLayout.addView(tvStats);
 
-        btnCalc.setOnClickListener(v -> {
-            try {
-                String[] s = etStart.getText().toString().trim().split(":");
-                String[] e = etEnd.getText().toString().trim().split(":");
-                int start = Integer.parseInt(s[0]) * 60 + Integer.parseInt(s[1]);
-                int end = Integer.parseInt(e[0]) * 60 + Integer.parseInt(e[1]);
+        historyLayout = new LinearLayout(this);
+        historyLayout.setOrientation(LinearLayout.VERTICAL);
+        mainLayout.addView(historyLayout);
 
-                int diff = end - start;
-                if (diff < 0) {
-                    diff += 24 * 60; 
-                }
+        setContentView(scrollView);
 
-                tvResult.setText("Total lucrat: " + (diff / 60) + "h " + (diff % 60) + "m");
-                tvResult.setTextColor(Color.parseColor("#28A745"));
-            } catch (Exception ex) {
-                tvResult.setText("Eroare! Folosește formatul HH:MM");
-                tvResult.setTextColor(Color.RED);
+        btnSave.setOnClickListener(v -> {
+            String date = etDate.getText().toString();
+            String shift = etShift.getText().toString();
+            String start = etStart.getText().toString();
+            String end = etEnd.getText().toString();
+
+            if (shift.isEmpty() || start.isEmpty() || end.isEmpty()) {
+                Toast.makeText(this, "Completați toate câmpurile!", Toast.LENGTH_SHORT).show();
+                return;
             }
+
+            int diff = calculateMinutes(start, end);
+            if (diff < 0) {
+                Toast.makeText(this, "Format oră invalid (folosiți HH:MM)!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            dbHelper.insertWaybill(date, shift, start, end, diff);
+            Toast.makeText(this, "Foaie de parcurs salvată cu succes!", Toast.LENGTH_SHORT).show();
+            refreshData();
         });
+
+        refreshData();
+    }
+
+    private void setShiftData(String shift, EditText etShift, EditText etStart, EditText etEnd) {
+        etShift.setText(shift);
+        if (shift.equals("11123")) { etStart.setText("07:25"); etEnd.setText("18:30"); }
+        else if (shift.equals("11186")) { etStart.setText("15:35"); etEnd.setText("16:00"); }
+        else if (shift.equals("11178")) { etStart.setText("10:30"); etEnd.setText("20:30"); }
+        else if (shift.equals("11190")) { etStart.setText("19:05"); etEnd.setText("10:30"); }
+        else if (shift.equals("11127")) { etStart.setText("15:30"); etEnd.setText("10:00"); }
+        else if (shift.equals("11182")) { etStart.setText("13:15"); etEnd.setText("23:00"); }
+    }
+
+    private int calculateMinutes(String startStr, String endStr) {
+        try {
+            String[] s = startStr.split(":");
+            String[] e = endStr.split(":");
+            int start = Integer.parseInt(s[0].trim()) * 60 + Integer.parseInt(s[1].trim());
+            int end = Integer.parseInt(e[0].trim()) * 60 + Integer.parseInt(e[1].trim());
+            int diff = end - start;
+            if (diff < 0) diff += 24 * 60; // Trecerea peste miezul nopții
+            return diff;
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    private void refreshData() {
+        historyLayout.removeAllViews();
+        Cursor c = dbHelper.getAllWaybills();
+        int totalMinutes = 0;
+
+        while (c.moveToNext()) {
+            String date = c.getString(1);
+            String shift = c.getString(2);
+            String start = c.getString(3);
+            String end = c.getString(4);
+            int mins = c.getInt(5);
+            totalMinutes += mins;
+
+            TextView tv = new TextView(this);
+            tv.setText("📅 " + date + " | Tura: " + shift + "\n🕒 " + start + " - " + end + " (Total: " + (mins / 60) + "h " + (mins % 60) + "m)");
+            tv.setPadding(dp(10), dp(10), dp(10), dp(10));
+            tv.setTextColor(Color.DKGRAY);
+            tv.setBackgroundColor(Color.parseColor("#E9ECEF"));
+            
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            params.setMargins(0, 0, 0, dp(10));
+            tv.setLayoutParams(params);
+            
+            historyLayout.addView(tv);
+        }
+        c.close();
+
+        tvStats.setText("📊 Raport Total:\nTotal ore înregistrate: " + (totalMinutes / 60) + "h " + (totalMinutes % 60) + "m");
+    }
+
+    class DatabaseHelper extends SQLiteOpenHelper {
+        public DatabaseHelper(Context context) {
+            super(context, "OreMunca.db", null, 1);
+        }
+
+        @Override
+        public void onCreate(SQLiteDatabase db) {
+            db.execSQL("CREATE TABLE waybills (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, shift TEXT, start TEXT, end TEXT, minutes INTEGER)");
+        }
+
+        @Override
+        public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        }
+
+        public void insertWaybill(String date, String shift, String start, String end, int minutes) {
+            SQLiteDatabase db = this.getWritableDatabase();
+            ContentValues cv = new ContentValues();
+            cv.put("date", date);
+            cv.put("shift", shift);
+            cv.put("start", start);
+            cv.put("end", end);
+            cv.put("minutes", minutes);
+            db.insert("waybills", null, cv);
+        }
+
+        public Cursor getAllWaybills() {
+            return this.getReadableDatabase().rawQuery("SELECT * FROM waybills ORDER BY id DESC", null);
+        }
     }
 }
