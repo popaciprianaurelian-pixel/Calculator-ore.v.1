@@ -6,7 +6,6 @@ import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
@@ -34,7 +33,7 @@ public class MainActivity extends Activity {
     Calendar currentMonth = Calendar.getInstance();
     TextView tvMonth, tvStats;
     CalendarView calendarView;
-    int currentNorm = 160; 
+    int currentNorm = 160;
     Uri currentPhotoUri;
 
     @Override
@@ -78,7 +77,7 @@ public class MainActivity extends Activity {
             openDayEditor(date);
         });
 
-        // Butoane Actiuni Rapoarte
+        // Butoane Rapoarte
         LinearLayout actionsRow = new LinearLayout(this);
         actionsRow.setOrientation(LinearLayout.VERTICAL);
         
@@ -86,16 +85,13 @@ public class MainActivity extends Activity {
         Button btnCSV = new Button(this); btnCSV.setText("📊 Export Raport Lunar (Excel)");
         Button btnNorm = new Button(this); btnNorm.setText("⚙️ Setează Norma Lunară");
         Button btnBackup = new Button(this); btnBackup.setText("💾 Backup Bază de Date");
-        Button btnRestore = new Button(this); btnRestore.setText("🔄 Restaurare Bază de Date");
 
-        actionsRow.addView(btnNorm); actionsRow.addView(btnPDF); actionsRow.addView(btnCSV);
-        actionsRow.addView(btnBackup); actionsRow.addView(btnRestore);
+        actionsRow.addView(btnNorm); actionsRow.addView(btnPDF); actionsRow.addView(btnCSV); actionsRow.addView(btnBackup);
         root.addView(actionsRow);
 
         btnPDF.setOnClickListener(v -> exportPDF());
         btnCSV.setOnClickListener(v -> exportCSV());
         btnBackup.setOnClickListener(v -> backupDB());
-        btnRestore.setOnClickListener(v -> restoreDB());
         btnNorm.setOnClickListener(v -> {
             EditText input = new EditText(this);
             input.setInputType(InputType.TYPE_CLASS_NUMBER);
@@ -132,7 +128,7 @@ public class MainActivity extends Activity {
         tvStats.setText(
             "📋 Zile lucrate: " + daysWorked + "\n" +
             "🎯 Norma setată: " + currentNorm + "h\n" +
-            "⏳ Total lucrat: " + workedHours + "h " + (totalMins % 60) + "m\n" +
+            "⏳ Total adunat: " + workedHours + "h " + (totalMins % 60) + "m\n" +
             "🔥 Ore Suplimentare (>8h/zi): " + (overMins / 60) + "h " + (overMins % 60) + "m\n" +
             "📈 Diferență: " + difText
         );
@@ -147,7 +143,43 @@ public class MainActivity extends Activity {
         scroll.addView(layout);
 
         TextView tvDate = new TextView(this); tvDate.setText("Data: " + date); tvDate.setTextSize(20);
+        tvDate.setPadding(0,0,0,20);
         layout.addView(tvDate);
+
+        // Butoane Ture Rapide
+        HorizontalScrollView hScroll = new HorizontalScrollView(this);
+        LinearLayout presetLayout = new LinearLayout(this);
+        presetLayout.setOrientation(LinearLayout.HORIZONTAL);
+        presetLayout.setPadding(0, 0, 0, 30);
+        hScroll.addView(presetLayout);
+        layout.addView(hScroll);
+
+        EditText etShift = new EditText(this); etShift.setHint("Număr Tren / Manevră");
+        layout.addView(etShift);
+
+        EditText etIntervals = new EditText(this); etIntervals.setHint("Orare Start-Stop (doar informativ)");
+        layout.addView(etIntervals);
+
+        // CONTROL TOTAL: AICI TRECI TU MANUAL ORELE SI MINUTELE
+        TextView tvManual = new TextView(this); 
+        tvManual.setText("CÂT AI LUCRAT EFECTIV? (Treci manual):"); 
+        tvManual.setTextColor(Color.parseColor("#D2691E"));
+        tvManual.setPadding(0,30,0,10);
+        layout.addView(tvManual);
+
+        LinearLayout timeLayout = new LinearLayout(this);
+        timeLayout.setOrientation(LinearLayout.HORIZONTAL);
+        
+        EditText etTotalH = new EditText(this); etTotalH.setHint("Ore"); etTotalH.setInputType(InputType.TYPE_CLASS_NUMBER); etTotalH.setEms(5);
+        TextView tvH = new TextView(this); tvH.setText(" h și  ");
+        EditText etTotalM = new EditText(this); etTotalM.setHint("Min"); etTotalM.setInputType(InputType.TYPE_CLASS_NUMBER); etTotalM.setEms(5);
+        TextView tvM = new TextView(this); tvM.setText(" m");
+        
+        timeLayout.addView(etTotalH); timeLayout.addView(tvH); timeLayout.addView(etTotalM); timeLayout.addView(tvM);
+        layout.addView(timeLayout);
+
+        EditText etNotes = new EditText(this); etNotes.setHint("Observații");
+        layout.addView(etNotes);
 
         RadioGroup rgType = new RadioGroup(this);
         rgType.setOrientation(LinearLayout.HORIZONTAL);
@@ -158,22 +190,26 @@ public class MainActivity extends Activity {
         }
         layout.addView(rgType);
 
-        LinearLayout intervalsLayout = new LinearLayout(this);
-        intervalsLayout.setOrientation(LinearLayout.VERTICAL);
-        layout.addView(intervalsLayout);
-
-        Button btnAddInterval = new Button(this);
-        btnAddInterval.setText("+ Adaugă interval multiplu (Start - Stop)");
-        layout.addView(btnAddInterval);
-
-        EditText etBreak = new EditText(this); etBreak.setHint("Pauză totală (în minute)"); etBreak.setInputType(InputType.TYPE_CLASS_NUMBER);
-        layout.addView(etBreak);
-
-        EditText etNotes = new EditText(this); etNotes.setHint("Observații / Număr Tren");
-        layout.addView(etNotes);
-
-        Button btnPhoto = new Button(this); btnPhoto.setText("📷 Adaugă Poză Foaie Parcurs");
+        Button btnPhoto = new Button(this); btnPhoto.setText("📷 Poză Foaie Parcurs");
         layout.addView(btnPhoto);
+
+        // Logica butoanelor de autocompletare
+        String[] shifts = {"11123", "11186", "11178", "R11190", "11127", "11182", "Manevra"};
+        for (String s : shifts) {
+            Button b = new Button(this);
+            b.setText(s);
+            b.setOnClickListener(v -> {
+                etShift.setText(s);
+                if(s.equals("11123")) { etIntervals.setText("07:25 - 19:30"); etTotalH.setText("12"); etTotalM.setText("5"); }
+                else if(s.equals("11186")) { etIntervals.setText("15:35 - 16:00"); etTotalH.setText("24"); etTotalM.setText("25"); }
+                else if(s.equals("11178")) { etIntervals.setText("10:30 - 20:30"); etTotalH.setText("10"); etTotalM.setText("0"); }
+                else if(s.equals("R11190")) { etIntervals.setText("19:35 - 14:30"); etTotalH.setText("18"); etTotalM.setText("55"); }
+                else if(s.equals("11127")) { etIntervals.setText("15:30 - 10:00"); etTotalH.setText("18"); etTotalM.setText("30"); }
+                else if(s.equals("11182")) { etIntervals.setText("13:15 - 23:00"); etTotalH.setText("9"); etTotalM.setText("45"); }
+                else if(s.equals("Manevra")) { etIntervals.setText("07:00 - 16:30"); etTotalH.setText("9"); etTotalM.setText("30"); }
+            });
+            presetLayout.addView(b);
+        }
 
         currentPhotoUri = null;
         Cursor c = db.getReadableDatabase().rawQuery("SELECT * FROM shifts WHERE date=?", new String[]{date});
@@ -184,18 +220,13 @@ public class MainActivity extends Activity {
             for (int i = 0; i < rgType.getChildCount(); i++) {
                 if (((RadioButton) rgType.getChildAt(i)).getText().toString().equals(type)) ((RadioButton) rgType.getChildAt(i)).setChecked(true);
             }
-            etBreak.setText(c.getString(4));
-            etNotes.setText(c.getString(7));
-            String intervalsStr = c.getString(8);
-            if (intervalsStr != null && !intervalsStr.isEmpty()) {
-                for (String intv : intervalsStr.split(",")) addIntervalView(intervalsLayout, intv);
-            }
-        } else {
-            addIntervalView(intervalsLayout, "");
+            etTotalH.setText(String.valueOf(c.getInt(3) / 60));
+            etTotalM.setText(String.valueOf(c.getInt(3) % 60));
+            etNotes.setText(c.getString(5));
+            etShift.setText(c.getString(7));
+            etIntervals.setText(c.getString(8));
         }
         c.close();
-
-        btnAddInterval.setOnClickListener(v -> addIntervalView(intervalsLayout, ""));
 
         btnPhoto.setOnClickListener(v -> {
             Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
@@ -218,38 +249,29 @@ public class MainActivity extends Activity {
                 for (int i = 0; i < rgType.getChildCount(); i++) {
                     if (((RadioButton) rgType.getChildAt(i)).isChecked()) type = ((RadioButton) rgType.getChildAt(i)).getText().toString();
                 }
-                int brk = etBreak.getText().toString().isEmpty() ? 0 : Integer.parseInt(etBreak.getText().toString());
                 
-                StringBuilder intervalsBuilder = new StringBuilder();
-                int totalMins = 0;
-                for (int i = 0; i < intervalsLayout.getChildCount(); i++) {
-                    LinearLayout row = (LinearLayout) intervalsLayout.getChildAt(i);
-                    EditText start = (EditText) row.getChildAt(0);
-                    EditText end = (EditText) row.getChildAt(1);
-                    String s = start.getText().toString().trim();
-                    String e = end.getText().toString().trim();
-                    if (!s.isEmpty() && !e.isEmpty()) {
-                        intervalsBuilder.append(s).append("-").append(e).append(",");
-                        totalMins += calcMins(s, e);
-                    }
-                }
+                int h = etTotalH.getText().toString().isEmpty() ? 0 : Integer.parseInt(etTotalH.getText().toString());
+                int m = etTotalM.getText().toString().isEmpty() ? 0 : Integer.parseInt(etTotalM.getText().toString());
+                int finalTotalMins = (h * 60) + m; // IA EXACT CE AI SCRIS TU, FARA SA SCADA NIMIC!
                 
-                totalMins -= brk;
-                if (totalMins < 0) totalMins = 0;
-                int overtime = totalMins > 480 ? (totalMins - 480) : 0; 
+                int overtime = finalTotalMins > 480 ? (finalTotalMins - 480) : 0; 
                 
                 SQLiteDatabase wdb = db.getWritableDatabase();
                 ContentValues cv = new ContentValues();
-                cv.put("date", date); cv.put("type", type); cv.put("break_mins", brk);
-                cv.put("total_mins", totalMins); cv.put("overtime_mins", overtime);
-                cv.put("notes", etNotes.getText().toString()); cv.put("intervals", intervalsBuilder.toString());
+                cv.put("date", date); 
+                cv.put("type", type); 
+                cv.put("total_mins", finalTotalMins); 
+                cv.put("overtime_mins", overtime);
+                cv.put("notes", etNotes.getText().toString()); 
+                cv.put("shift_code", etShift.getText().toString());
+                cv.put("intervals", etIntervals.getText().toString());
                 if(currentPhotoUri != null) cv.put("photo_uri", currentPhotoUri.toString());
                 
                 if (fExistingId != null) wdb.update("shifts", cv, "id=?", new String[]{fExistingId});
                 else wdb.insert("shifts", null, cv);
                 
                 updateUI();
-                Toast.makeText(this, "Ziuă salvată cu succes!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Salvat exact cum ai introdus!", Toast.LENGTH_SHORT).show();
             })
             .setNeutralButton("Șterge", (dialog, which) -> {
                 if (fExistingId != null) {
@@ -260,30 +282,6 @@ public class MainActivity extends Activity {
             })
             .setNegativeButton("Anulează", null)
             .show();
-    }
-
-    void addIntervalView(LinearLayout parent, String preset) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        EditText etStart = new EditText(this); etStart.setHint("Start (ex: 07:00)"); etStart.setEms(6);
-        EditText etEnd = new EditText(this); etEnd.setHint("Stop (ex: 19:30)"); etEnd.setEms(6);
-        if (!preset.isEmpty() && preset.contains("-")) {
-            String[] p = preset.split("-");
-            etStart.setText(p[0]); if (p.length > 1) etEnd.setText(p[1]);
-        }
-        row.addView(etStart); row.addView(etEnd);
-        parent.addView(row);
-    }
-
-    int calcMins(String start, String end) {
-        try {
-            String[] s = start.split(":"); String[] e = end.split(":");
-            int st = Integer.parseInt(s[0].trim()) * 60 + Integer.parseInt(s[1].trim());
-            int en = Integer.parseInt(e[0].trim()) * 60 + Integer.parseInt(e[1].trim());
-            int diff = en - st;
-            if (diff < 0) diff += 24 * 60; // Sare peste miezul noptii!
-            return diff;
-        } catch (Exception e) { return 0; }
     }
 
     void exportPDF() {
@@ -299,10 +297,10 @@ public class MainActivity extends Activity {
         paint.setTextSize(12);
         int y = 60;
         String monthPrefix = String.format(Locale.US, "%04d-%02d", currentMonth.get(Calendar.YEAR), currentMonth.get(Calendar.MONTH) + 1);
-        Cursor c = db.getReadableDatabase().rawQuery("SELECT date, type, intervals, total_mins, notes FROM shifts WHERE date LIKE ? ORDER BY date", new String[]{monthPrefix + "%"});
+        Cursor c = db.getReadableDatabase().rawQuery("SELECT date, type, total_mins, notes, shift_code, intervals FROM shifts WHERE date LIKE ? ORDER BY date", new String[]{monthPrefix + "%"});
         
         while (c.moveToNext()) {
-            String line = c.getString(0) + " | " + c.getString(1) + " | Int: " + c.getString(2) + " | Ore: " + (c.getInt(3) / 60) + "h " + (c.getInt(3) % 60) + "m | Obs: " + c.getString(4);
+            String line = c.getString(0) + " | " + c.getString(4) + " (" + c.getString(5) + ") | " + c.getString(1) + " | Total: " + (c.getInt(2) / 60) + "h " + (c.getInt(2) % 60) + "m";
             canvas.drawText(line, 10, y, paint);
             y += 20;
         }
@@ -310,9 +308,9 @@ public class MainActivity extends Activity {
         document.finishPage(page);
         
         try {
-            File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Raport_" + monthPrefix + ".pdf");
+            File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Raport_Ore_" + monthPrefix + ".pdf");
             document.writeTo(new FileOutputStream(file));
-            Toast.makeText(this, "Raport PDF salvat in folderul Downloads!", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Raport PDF salvat in Downloads!", Toast.LENGTH_LONG).show();
         } catch (IOException e) { Toast.makeText(this, "Eroare PDF", Toast.LENGTH_SHORT).show(); }
         document.close();
     }
@@ -320,16 +318,16 @@ public class MainActivity extends Activity {
     void exportCSV() {
         String monthPrefix = String.format(Locale.US, "%04d-%02d", currentMonth.get(Calendar.YEAR), currentMonth.get(Calendar.MONTH) + 1);
         try {
-            File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Raport_" + monthPrefix + ".csv");
+            File file = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Raport_Ore_" + monthPrefix + ".csv");
             FileWriter fw = new FileWriter(file);
-            fw.append("Data,Tip,Intervale,Total_Min,Suplimentare_Min,Observatii\n");
-            Cursor c = db.getReadableDatabase().rawQuery("SELECT date, type, intervals, total_mins, overtime_mins, notes FROM shifts WHERE date LIKE ? ORDER BY date", new String[]{monthPrefix + "%"});
+            fw.append("Data,Tren,Interval,Tip,Total_Min,Suplimentare_Min,Observatii\n");
+            Cursor c = db.getReadableDatabase().rawQuery("SELECT date, shift_code, intervals, type, total_mins, overtime_mins, notes FROM shifts WHERE date LIKE ? ORDER BY date", new String[]{monthPrefix + "%"});
             while (c.moveToNext()) {
                 fw.append(c.getString(0)).append(",").append(c.getString(1)).append(",").append(c.getString(2)).append(",")
-                  .append(String.valueOf(c.getInt(3))).append(",").append(String.valueOf(c.getInt(4))).append(",").append(c.getString(5)).append("\n");
+                  .append(c.getString(3)).append(",").append(String.valueOf(c.getInt(4))).append(",").append(String.valueOf(c.getInt(5))).append(",").append(c.getString(6)).append("\n");
             }
             c.close(); fw.flush(); fw.close();
-            Toast.makeText(this, "Fisier Excel (CSV) salvat in folderul Downloads!", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Fisier Excel salvat in Downloads!", Toast.LENGTH_LONG).show();
         } catch (IOException e) { Toast.makeText(this, "Eroare Excel", Toast.LENGTH_SHORT).show(); }
     }
 
@@ -342,17 +340,6 @@ public class MainActivity extends Activity {
         } catch (Exception e) {}
     }
 
-    void restoreDB() {
-        try {
-            File src = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Backup_CalculatorOre.db");
-            File dst = getDatabasePath("OreMunca.db");
-            if (src.exists()) {
-                copyFile(src, dst); updateUI();
-                Toast.makeText(this, "Datele au fost restaurate cu succes!", Toast.LENGTH_LONG).show();
-            } else { Toast.makeText(this, "Nu s-a gasit niciun backup anterior.", Toast.LENGTH_SHORT).show(); }
-        } catch (Exception e) {}
-    }
-
     void copyFile(File src, File dst) throws IOException {
         InputStream in = new FileInputStream(src); OutputStream out = new FileOutputStream(dst);
         byte[] buf = new byte[1024]; int len;
@@ -361,9 +348,9 @@ public class MainActivity extends Activity {
     }
 
     class DatabaseHelper extends SQLiteOpenHelper {
-        public DatabaseHelper(Context ctx) { super(ctx, "OreMunca.db", null, 3); }
+        public DatabaseHelper(Context ctx) { super(ctx, "OreMunca.db", null, 5); }
         public void onCreate(SQLiteDatabase db) {
-            db.execSQL("CREATE TABLE shifts (id INTEGER PRIMARY KEY, date TEXT, type TEXT, start TEXT, break_mins INTEGER, total_mins INTEGER, overtime_mins INTEGER, notes TEXT, intervals TEXT, photo_uri TEXT)");
+            db.execSQL("CREATE TABLE shifts (id INTEGER PRIMARY KEY, date TEXT, type TEXT, total_mins INTEGER, overtime_mins INTEGER, notes TEXT, photo_uri TEXT, shift_code TEXT, intervals TEXT)");
         }
         public void onUpgrade(SQLiteDatabase db, int oldV, int newV) {
             db.execSQL("DROP TABLE IF EXISTS shifts"); onCreate(db);
